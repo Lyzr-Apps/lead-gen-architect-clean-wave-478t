@@ -1,0 +1,36 @@
+{
+  "agent_name": "Contact Enrichment Agent",
+  "agent_id": "69961bcef17ccc575ee48c1a",
+  "agent_type": "json",
+  "accessor": "json",
+  "has_module_outputs": false,
+  "response_schema": {
+    "type": "object",
+    "properties": {
+      "enriched_events": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "event_title": { "type": "string" },
+            "organizer_name": { "type": "string" },
+            "organizer_role": { "type": "string" },
+            "organizer_linkedin_url": { "type": "string" },
+            "organizer_email": { "type": "string" },
+            "partnership_url": { "type": "string" },
+            "cfp_url": { "type": "string" },
+            "organization_name": { "type": "string" }
+          },
+          "required": [
+            "event_title", "organizer_name", "organizer_role", "organizer_linkedin_url",
+            "organizer_email", "partnership_url", "cfp_url", "organization_name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "enrichment_summary": { "type": "string" }
+    },
+    "required": ["enriched_events", "enrichment_summary"],
+    "additionalProperties": false
+  }
+}

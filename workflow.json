@@ -1,0 +1,47 @@
+{
+  "nodes": [
+    {
+      "id": "input_node",
+      "type": "Input",
+      "label": "User Input (Location, Persona, Domain)",
+      "nodeCategory": "input"
+    },
+    {
+      "id": "manager_agent",
+      "type": "Agent",
+      "label": "Event Discovery Coordinator",
+      "nodeCategory": "agent"
+    },
+    {
+      "id": "search_agent",
+      "type": "Agent",
+      "label": "Event Search Agent",
+      "nodeCategory": "agent"
+    },
+    {
+      "id": "enrichment_agent",
+      "type": "Agent",
+      "label": "Contact Enrichment Agent",
+      "nodeCategory": "agent"
+    },
+    {
+      "id": "strategy_agent",
+      "type": "Agent",
+      "label": "Strategy & Scoring Agent",
+      "nodeCategory": "agent"
+    },
+    {
+      "id": "output_node",
+      "type": "Output",
+      "label": "Enriched Event Results",
+      "nodeCategory": "end"
+    }
+  ],
+  "edges": [
+    { "source": "input_node", "target": "manager_agent" },
+    { "source": "manager_agent", "target": "search_agent" },
+    { "source": "manager_agent", "target": "enrichment_agent" },
+    { "source": "manager_agent", "target": "strategy_agent" },
+    { "source": "manager_agent", "target": "output_node" }
+  ]
+}

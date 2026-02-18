@@ -1,0 +1,54 @@
+{
+  "agent_name": "Event Discovery Coordinator",
+  "agent_id": "69961be5a552b02becc38dd5",
+  "agent_type": "json",
+  "accessor": "json",
+  "has_module_outputs": false,
+  "response_schema": {
+    "type": "object",
+    "properties": {
+      "events": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "event_title": { "type": "string" },
+            "event_date": { "type": "string" },
+            "event_time": { "type": "string" },
+            "venue_name": { "type": "string" },
+            "venue_address": { "type": "string" },
+            "platform_source": { "type": "string" },
+            "registration_url": { "type": "string" },
+            "event_description": { "type": "string" },
+            "estimated_attendee_count": { "type": "string" },
+            "organizer_name": { "type": "string" },
+            "organizer_role": { "type": "string" },
+            "organizer_linkedin_url": { "type": "string" },
+            "organizer_email": { "type": "string" },
+            "partnership_url": { "type": "string" },
+            "cfp_url": { "type": "string" },
+            "organization_name": { "type": "string" },
+            "persona_match_score": { "type": "number" },
+            "score_rationale": { "type": "string" },
+            "outreach_pitch": { "type": "string" },
+            "email_subject_line": { "type": "string" }
+          },
+          "required": [
+            "event_title", "event_date", "event_time", "venue_name", "venue_address",
+            "platform_source", "registration_url", "event_description", "estimated_attendee_count",
+            "organizer_name", "organizer_role", "organizer_linkedin_url", "organizer_email",
+            "partnership_url", "cfp_url", "organization_name", "persona_match_score",
+            "score_rationale", "outreach_pitch", "email_subject_line"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "total_events_found": { "type": "number" },
+      "search_summary": { "type": "string" },
+      "enrichment_summary": { "type": "string" },
+      "overall_strategy_summary": { "type": "string" }
+    },
+    "required": ["events", "total_events_found", "search_summary", "enrichment_summary", "overall_strategy_summary"],
+    "additionalProperties": false
+  }
+}

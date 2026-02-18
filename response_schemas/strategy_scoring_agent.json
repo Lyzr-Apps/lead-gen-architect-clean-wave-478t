@@ -1,0 +1,33 @@
+{
+  "agent_name": "Strategy and Scoring Agent",
+  "agent_id": "69961bcf292f5f050e6c3d22",
+  "agent_type": "json",
+  "accessor": "json",
+  "has_module_outputs": false,
+  "response_schema": {
+    "type": "object",
+    "properties": {
+      "scored_events": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "event_title": { "type": "string" },
+            "persona_match_score": { "type": "number" },
+            "score_rationale": { "type": "string" },
+            "outreach_pitch": { "type": "string" },
+            "email_subject_line": { "type": "string" }
+          },
+          "required": [
+            "event_title", "persona_match_score", "score_rationale",
+            "outreach_pitch", "email_subject_line"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "overall_summary": { "type": "string" }
+    },
+    "required": ["scored_events", "overall_summary"],
+    "additionalProperties": false
+  }
+}

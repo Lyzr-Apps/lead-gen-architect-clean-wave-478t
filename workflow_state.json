@@ -1,0 +1,20 @@
+{
+  "agents": {
+    "event_discovery_coordinator": {
+      "agent_id": "69961be5a552b02becc38dd5",
+      "type": "manager"
+    },
+    "event_search_agent": {
+      "agent_id": "69961bce292f5f050e6c3d20",
+      "type": "sub-agent"
+    },
+    "contact_enrichment_agent": {
+      "agent_id": "69961bcef17ccc575ee48c1a",
+      "type": "sub-agent"
+    },
+    "strategy_scoring_agent": {
+      "agent_id": "69961bcf292f5f050e6c3d22",
+      "type": "sub-agent"
+    }
+  }
+}

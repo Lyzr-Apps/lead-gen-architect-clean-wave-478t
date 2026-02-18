@@ -1,0 +1,68 @@
+{
+  "agent_name": "Event Discovery Coordinator",
+  "agent_id": "69961be5a552b02becc38dd5",
+  "description": "Coordinates the three sub-agents, routes user inputs (Location, Persona, Domain), aggregates enriched event data into final structured JSON output, and ensures date filtering and relevance criteria are met",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "events": [
+      {
+        "event_title": "string",
+        "event_date": "string",
+        "event_time": "string",
+        "venue_name": "string",
+        "venue_address": "string",
+        "platform_source": "string",
+        "registration_url": "string",
+        "event_description": "string",
+        "estimated_attendee_count": "string",
+        "organizer_name": "string",
+        "organizer_role": "string",
+        "organizer_linkedin_url": "string",
+        "organizer_email": "string",
+        "partnership_url": "string",
+        "cfp_url": "string",
+        "organization_name": "string",
+        "persona_match_score": "number",
+        "score_rationale": "string",
+        "outreach_pitch": "string",
+        "email_subject_line": "string"
+      }
+    ],
+    "total_events_found": "number",
+    "search_summary": "string",
+    "enrichment_summary": "string",
+    "overall_strategy_summary": "string"
+  },
+  "example_response": {
+    "events": [
+      {
+        "event_title": "sample string",
+        "event_date": "sample string",
+        "event_time": "sample string",
+        "venue_name": "sample string",
+        "venue_address": "sample string",
+        "platform_source": "sample string",
+        "registration_url": "sample string",
+        "event_description": "sample string",
+        "estimated_attendee_count": "sample string",
+        "organizer_name": "sample string",
+        "organizer_role": "sample string",
+        "organizer_linkedin_url": "sample string",
+        "organizer_email": "sample string",
+        "partnership_url": "sample string",
+        "cfp_url": "sample string",
+        "organization_name": "sample string",
+        "persona_match_score": 0,
+        "score_rationale": "sample string",
+        "outreach_pitch": "sample string",
+        "email_subject_line": "sample string"
+      }
+    ],
+    "total_events_found": 0,
+    "search_summary": "sample string",
+    "enrichment_summary": "sample string",
+    "overall_strategy_summary": "sample string"
+  }
+}
