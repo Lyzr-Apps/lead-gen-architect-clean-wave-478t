@@ -163,6 +163,53 @@ const SAMPLE_SUMMARY: Partial<DiscoveryResponse> = {
   overall_strategy_summary: 'Focus on the AI & ML Summit (92 score) and DevOps World (78 score) for maximum ROI. The Women in Tech Forum offers high-quality networking despite moderate score. Startup Pitch Night is lower priority but offers community visibility.'
 }
 
+const SAMPLE_PAST_EVENTS: EventData[] = [
+  {
+    event_title: 'SaaS Growth Summit 2024',
+    event_date: '2024-11-12',
+    event_time: '09:00 - 17:00',
+    venue_name: 'Marriott Marquis',
+    venue_address: '780 Mission St, San Francisco, CA 94103',
+    platform_source: 'Eventbrite',
+    registration_url: 'https://eventbrite.com/saas-growth-2024',
+    event_description: 'Annual gathering of SaaS founders, investors, and operators discussing growth strategies, product-led growth, and market expansion.',
+    estimated_attendee_count: '1,200',
+    organizer_name: 'Amanda Lee',
+    organizer_role: 'Head of Events',
+    organizer_linkedin_url: 'https://linkedin.com/in/amandalee',
+    organizer_email: 'amanda@saasgrowth.io',
+    partnership_url: 'https://saasgrowth.io/partners',
+    cfp_url: '',
+    organization_name: 'SaaS Growth Collective',
+    persona_match_score: 81,
+    score_rationale: 'Strong SaaS audience alignment. High decision-maker density among attendees. Previous event had excellent sponsor engagement metrics.',
+    outreach_pitch: 'Amanda, the SaaS Growth Summit was a fantastic event last year. We would love to discuss a partnership for next year, offering our analytics platform as a key sponsor resource.',
+    email_subject_line: 'Partnership Follow-up - SaaS Growth Summit'
+  },
+  {
+    event_title: 'Cloud Infrastructure Meetup',
+    event_date: '2024-09-05',
+    event_time: '18:30 - 21:00',
+    venue_name: 'GitHub HQ',
+    venue_address: '88 Colin P. Kelly Jr. St, San Francisco, CA 94107',
+    platform_source: 'Meetup',
+    registration_url: 'https://meetup.com/cloud-infra-sf',
+    event_description: 'Monthly meetup for cloud infrastructure engineers covering Kubernetes, serverless, and multi-cloud strategies.',
+    estimated_attendee_count: '180',
+    organizer_name: 'Derek Nguyen',
+    organizer_role: 'Community Organizer',
+    organizer_linkedin_url: 'https://linkedin.com/in/dereknguyen',
+    organizer_email: 'derek@cloudinfra.dev',
+    partnership_url: '',
+    cfp_url: 'https://cloudinfra.dev/speak',
+    organization_name: 'Cloud Infrastructure SF',
+    persona_match_score: 58,
+    score_rationale: 'Technical audience with moderate persona overlap. Good for brand awareness among infrastructure engineers. Smaller scale limits lead generation potential.',
+    outreach_pitch: 'Derek, we enjoyed the Cloud Infrastructure Meetup and would be interested in sponsoring a future session or providing a lightning talk on our infrastructure tooling.',
+    email_subject_line: 'Sponsorship Interest - Cloud Infra Meetup'
+  }
+]
+
 // ─── Markdown Renderer ──────────────────────────────────────────────────────
 
 function formatInline(text: string) {
@@ -581,7 +628,7 @@ function PipelineCard({ event, onStatusChange, onClick }: {
 
 export default function Page() {
   // ── Navigation ──
-  const [activeView, setActiveView] = useState<'discover' | 'outreach'>('discover')
+  const [activeView, setActiveView] = useState<'discover' | 'outreach' | 'past'>('discover')
 
   // ── Lifted chip + input state (FIX A) ──
   const [locationChips, setLocationChips] = useState<string[]>([])
@@ -590,6 +637,9 @@ export default function Page() {
   const [locationInput, setLocationInput] = useState('')
   const [personaInput, setPersonaInput] = useState('')
   const [domainInput, setDomainInput] = useState('')
+
+  // ── Past Events State ──
+  const [pastEvents, setPastEvents] = useState<EventData[]>([])
 
   // ── Search State ──
   const [events, setEvents] = useState<EventData[]>([])
@@ -724,14 +774,24 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
         }
 
         if (parsed && Array.isArray(parsed.events) && parsed.events.length > 0) {
-          setEvents(parsed.events)
+          const today = new Date().toISOString().split('T')[0]
+          const upcoming = parsed.events.filter(ev => (ev?.event_date ?? '') >= today)
+          const past = parsed.events.filter(ev => (ev?.event_date ?? '') < today && (ev?.event_date ?? '') !== '')
+          setEvents(upcoming)
+          if (past.length > 0) {
+            setPastEvents(prev => {
+              const existing = new Set(prev.map(p => `${p.event_title}|${p.event_date}`))
+              const newPast = past.filter(p => !existing.has(`${p.event_title}|${p.event_date}`))
+              return [...prev, ...newPast]
+            })
+          }
           setSearchMeta({
             total_events_found: parsed.total_events_found,
             search_summary: parsed.search_summary,
             enrichment_summary: parsed.enrichment_summary,
             overall_strategy_summary: parsed.overall_strategy_summary
           })
-          notify(`Found ${parsed.events.length} events`)
+          notify(`Found ${upcoming.length} upcoming${past.length > 0 ? ` and ${past.length} past` : ''} events`)
         } else {
           setError('No events found. Try broadening your search criteria.')
         }
@@ -840,6 +900,13 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
             <FiCompass className="w-4 h-4" />
             Discover
           </button>
+          <button type="button" onClick={() => setActiveView('past')} className={`w-full flex items-center gap-3 px-4 py-3 text-xs tracking-[0.12em] uppercase transition-all duration-200 ${activeView === 'past' ? 'bg-[hsl(30_5%_12%)] text-primary border-l-2 border-primary' : 'text-muted-foreground hover:text-foreground hover:bg-[hsl(30_5%_12%)] border-l-2 border-transparent'}`}>
+            <FiCalendar className="w-4 h-4" />
+            Past Events
+            {(showSample ? SAMPLE_PAST_EVENTS.length : pastEvents.length) > 0 && (
+              <span className="ml-auto text-[10px] bg-primary/15 text-primary px-1.5 py-0.5">{showSample ? SAMPLE_PAST_EVENTS.length : pastEvents.length}</span>
+            )}
+          </button>
           <button type="button" onClick={() => setActiveView('outreach')} className={`w-full flex items-center gap-3 px-4 py-3 text-xs tracking-[0.12em] uppercase transition-all duration-200 ${activeView === 'outreach' ? 'bg-[hsl(30_5%_12%)] text-primary border-l-2 border-primary' : 'text-muted-foreground hover:text-foreground hover:bg-[hsl(30_5%_12%)] border-l-2 border-transparent'}`}>
             <FiSend className="w-4 h-4" />
             My Outreach
@@ -868,11 +935,11 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
         <header className="flex-shrink-0 border-b border-border bg-card/50 p-4">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-sm font-medium tracking-[0.12em] uppercase text-foreground">
-              {activeView === 'discover' ? 'Event Discovery' : 'Outreach Pipeline'}
+              {activeView === 'discover' ? 'Event Discovery' : activeView === 'past' ? 'Past Events' : 'Outreach Pipeline'}
             </h1>
             <label className="text-[10px] tracking-[0.12em] uppercase text-muted-foreground cursor-pointer flex items-center gap-2">
               Sample preview
-              <input type="checkbox" checked={showSample} onChange={(e) => { setShowSample(e.target.checked); if (e.target.checked) setSearchMeta({ ...SAMPLE_SUMMARY }); else if (events.length === 0) setSearchMeta({}) }} className="w-3.5 h-3.5 cursor-pointer accent-[hsl(40,50%,55%)]" />
+              <input type="checkbox" checked={showSample} onChange={(e) => { setShowSample(e.target.checked); if (e.target.checked) { setSearchMeta({ ...SAMPLE_SUMMARY }); } else { if (events.length === 0) setSearchMeta({}); } }} className="w-3.5 h-3.5 cursor-pointer accent-[hsl(40,50%,55%)]" />
             </label>
           </div>
 
@@ -988,6 +1055,58 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
                   <p className="text-xs text-muted-foreground tracking-wide leading-relaxed">{showSample ? SAMPLE_SUMMARY.enrichment_summary : searchMeta.enrichment_summary}</p>
                 </div>
               )}
+            </div>
+          ) : activeView === 'past' ? (
+            /* ── Past Events View ── */
+            <div className="p-6">
+              {(() => {
+                const displayPastEvents = showSample ? SAMPLE_PAST_EVENTS : pastEvents
+                const sortedPast = [...displayPastEvents].sort((a, b) => {
+                  if (sortBy === 'score') return (b?.persona_match_score ?? 0) - (a?.persona_match_score ?? 0)
+                  return (b?.event_date ?? '').localeCompare(a?.event_date ?? '')
+                })
+
+                return (
+                  <>
+                    {/* Sort Bar */}
+                    {sortedPast.length > 0 && (
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">{sortedPast.length} past event{sortedPast.length !== 1 ? 's' : ''}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Sort by</span>
+                          <Select value={sortBy} onValueChange={(val) => setSortBy(val as 'score' | 'date')}>
+                            <SelectTrigger className="h-7 w-[130px] text-[10px] tracking-[0.12em] uppercase bg-secondary/50 border-border text-foreground">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border-border">
+                              <SelectItem value="score" className="text-[11px] tracking-wide text-popover-foreground">Relevance Score</SelectItem>
+                              <SelectItem value="date" className="text-[11px] tracking-wide text-popover-foreground">Date</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Past Events Grid */}
+                    {sortedPast.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {sortedPast.map((event, idx) => (
+                          <div key={`past-${event?.event_title ?? 'event'}-${idx}`} className="relative">
+                            <EventCard event={event} onClick={() => { setSelectedEvent(event); setDrawerOpen(true); }} />
+                            <span className="absolute top-3 right-3 text-[9px] uppercase tracking-[0.15em] text-muted-foreground font-medium bg-secondary/80 px-1.5 py-0.5 border border-border">Past</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-20">
+                        <FiCalendar className="w-10 h-10 text-muted-foreground/30 mb-4" />
+                        <p className="text-sm text-muted-foreground tracking-wide mb-1">No past events found</p>
+                        <p className="text-xs text-muted-foreground/60 tracking-wide">Past events from your searches will appear here.</p>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
           ) : (
             /* ── Outreach Pipeline ── */
