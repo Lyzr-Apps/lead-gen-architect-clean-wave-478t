@@ -2,24 +2,20 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { callAIAgent } from '@/lib/aiAgent'
-import { useLyzrAgentEvents } from '@/lib/lyzrAgentEvents'
-import { AgentActivityPanel } from '@/components/AgentActivityPanel'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Switch } from '@/components/ui/switch'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import {
   FiSearch, FiX, FiExternalLink, FiMail, FiCopy, FiMapPin,
   FiCalendar, FiUsers, FiCompass, FiSend,
-  FiCheck, FiPlus, FiFilter
+  FiCheck, FiPlus, FiFilter, FiLinkedin, FiRefreshCw
 } from 'react-icons/fi'
 import { HiOutlineSparkles } from 'react-icons/hi2'
-import { FiLinkedin } from 'react-icons/fi'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -198,6 +194,81 @@ function renderMarkdown(text: string) {
   )
 }
 
+// ─── Deep Response Extractor ─────────────────────────────────────────────────
+
+function extractDiscoveryResponse(raw: unknown): DiscoveryResponse | null {
+  let data = raw
+  if (typeof data === 'string') {
+    const trimmed = (data as string).trim()
+    try { data = JSON.parse(trimmed) } catch {
+      const m1 = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
+      if (m1 && m1[1]) { try { data = JSON.parse(m1[1].trim()) } catch { /* */ } }
+      if (typeof data === 'string') {
+        const m2 = trimmed.match(/\{[\s\S]*\}/)
+        if (m2) { try { data = JSON.parse(m2[0]) } catch { return null } }
+        else return null
+      }
+    }
+  }
+  if (!data || typeof data !== 'object') return null
+
+  const obj = data as Record<string, unknown>
+  let src: Record<string, unknown> = obj
+
+  // Dig through response.result structure
+  if (obj.response && typeof obj.response === 'object') {
+    const r = obj.response as Record<string, unknown>
+    if (r.result && typeof r.result === 'object' && !Array.isArray(r.result)) {
+      src = r.result as Record<string, unknown>
+    } else if (r.result && typeof r.result === 'string') {
+      try { src = JSON.parse(r.result as string) } catch { /* */ }
+    }
+  }
+
+  // Also try top-level result
+  if (!Array.isArray(src.events) && obj.result && typeof obj.result === 'object' && !Array.isArray(obj.result)) {
+    src = obj.result as Record<string, unknown>
+  }
+  if (!Array.isArray(src.events) && obj.result && typeof obj.result === 'string') {
+    try {
+      const parsed = JSON.parse(obj.result as string)
+      if (parsed && typeof parsed === 'object') src = parsed as Record<string, unknown>
+    } catch { /* */ }
+  }
+
+  const arr = Array.isArray(src.events) ? src.events : []
+  const evs: EventData[] = arr.map((e: Record<string, unknown>) => ({
+    event_title: String(e?.event_title ?? 'Untitled Event'),
+    event_date: String(e?.event_date ?? ''),
+    event_time: String(e?.event_time ?? ''),
+    venue_name: String(e?.venue_name ?? ''),
+    venue_address: String(e?.venue_address ?? ''),
+    platform_source: String(e?.platform_source ?? 'Unknown'),
+    registration_url: String(e?.registration_url ?? ''),
+    event_description: String(e?.event_description ?? ''),
+    estimated_attendee_count: String(e?.estimated_attendee_count ?? ''),
+    organizer_name: String(e?.organizer_name ?? ''),
+    organizer_role: String(e?.organizer_role ?? ''),
+    organizer_linkedin_url: String(e?.organizer_linkedin_url ?? ''),
+    organizer_email: String(e?.organizer_email ?? ''),
+    partnership_url: String(e?.partnership_url ?? ''),
+    cfp_url: String(e?.cfp_url ?? ''),
+    organization_name: String(e?.organization_name ?? ''),
+    persona_match_score: typeof e?.persona_match_score === 'number' ? e.persona_match_score : Number(e?.persona_match_score) || 0,
+    score_rationale: String(e?.score_rationale ?? ''),
+    outreach_pitch: String(e?.outreach_pitch ?? ''),
+    email_subject_line: String(e?.email_subject_line ?? ''),
+  }))
+
+  return {
+    events: evs,
+    total_events_found: typeof src.total_events_found === 'number' ? src.total_events_found : evs.length,
+    search_summary: String(src.search_summary ?? ''),
+    enrichment_summary: String(src.enrichment_summary ?? ''),
+    overall_strategy_summary: String(src.overall_strategy_summary ?? ''),
+  }
+}
+
 // ─── Score Gauge ─────────────────────────────────────────────────────────────
 
 function ScoreGauge({ score }: { score: number }) {
@@ -273,52 +344,6 @@ function SkeletonCards() {
   )
 }
 
-// ─── Chip Input ──────────────────────────────────────────────────────────────
-
-function ChipInput({ label, icon, chips, onAdd, onRemove, placeholder }: {
-  label: string
-  icon: React.ReactNode
-  chips: string[]
-  onAdd: (val: string) => void
-  onRemove: (idx: number) => void
-  placeholder: string
-}) {
-  const [inputVal, setInputVal] = useState('')
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && inputVal.trim()) {
-      e.preventDefault()
-      onAdd(inputVal.trim())
-      setInputVal('')
-    }
-  }
-
-  return (
-    <div className="flex-1 min-w-[200px]">
-      <label className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-normal mb-1.5 block">{label}</label>
-      <div className="flex items-center flex-wrap gap-1.5 bg-secondary/50 border border-border px-3 py-2 min-h-[40px]">
-        {icon}
-        {Array.isArray(chips) && chips.map((chip, idx) => (
-          <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-primary/15 text-primary text-xs tracking-wide border border-primary/20">
-            {chip}
-            <button onClick={(e) => { e.stopPropagation(); onRemove(idx); }} className="hover:text-foreground transition-colors">
-              <FiX className="w-3 h-3" />
-            </button>
-          </span>
-        ))}
-        <input
-          type="text"
-          value={inputVal}
-          onChange={(e) => setInputVal(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={Array.isArray(chips) && chips.length > 0 ? '' : placeholder}
-          className="flex-1 min-w-[80px] bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 outline-none tracking-wide"
-        />
-      </div>
-    </div>
-  )
-}
-
 // ─── Detail Drawer ───────────────────────────────────────────────────────────
 
 function DetailDrawer({ event, isOpen, onClose, onTrack, isTracked }: {
@@ -347,7 +372,7 @@ function DetailDrawer({ event, isOpen, onClose, onTrack, isTracked }: {
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-card border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+      <div className="relative w-full max-w-lg bg-card border-l border-border shadow-2xl flex flex-col" style={{ animation: 'slideInRight 0.3s ease-out' }}>
         {/* Header */}
         <div className="p-6 border-b border-border">
           <div className="flex items-start justify-between">
@@ -358,7 +383,7 @@ function DetailDrawer({ event, isOpen, onClose, onTrack, isTracked }: {
             </div>
             <div className="flex items-center gap-3">
               <ScoreGauge score={event?.persona_match_score ?? 0} />
-              <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+              <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1">
                 <FiX className="w-5 h-5" />
               </button>
             </div>
@@ -408,7 +433,7 @@ function DetailDrawer({ event, isOpen, onClose, onTrack, isTracked }: {
                         <div className="flex items-center gap-2">
                           <FiMail className="w-4 h-4 text-muted-foreground" />
                           <span className="text-sm text-foreground tracking-wide flex-1">{event.organizer_email}</span>
-                          <button onClick={() => copyToClipboard(event.organizer_email, 'email')} className="text-muted-foreground hover:text-primary transition-colors p-1">
+                          <button type="button" onClick={() => copyToClipboard(event.organizer_email, 'email')} className="text-muted-foreground hover:text-primary transition-colors p-1">
                             {copiedField === 'email' ? <FiCheck className="w-3.5 h-3.5 text-green-500" /> : <FiCopy className="w-3.5 h-3.5" />}
                           </button>
                         </div>
@@ -449,9 +474,19 @@ function DetailDrawer({ event, isOpen, onClose, onTrack, isTracked }: {
                     <div className="border-l-2 border-primary/40 pl-4 py-2 bg-secondary/30">
                       <p className="text-sm text-foreground leading-relaxed tracking-wide italic">{event?.outreach_pitch ?? 'No pitch generated.'}</p>
                     </div>
-                    <button onClick={() => copyToClipboard(event?.outreach_pitch ?? '', 'pitch')} className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors tracking-wide">
+                    <button type="button" onClick={() => copyToClipboard(event?.outreach_pitch ?? '', 'pitch')} className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors tracking-wide">
                       {copiedField === 'pitch' ? <><FiCheck className="w-3 h-3 text-green-500" /> Copied</> : <><FiCopy className="w-3 h-3" /> Copy Pitch</>}
                     </button>
+                  </div>
+                  <Separator className="bg-border" />
+                  <div>
+                    <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground block mb-2">Email Subject</span>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-foreground tracking-wide flex-1">{event?.email_subject_line ?? 'No subject line.'}</p>
+                      <button type="button" onClick={() => copyToClipboard(event?.email_subject_line ?? '', 'subject')} className="text-muted-foreground hover:text-primary transition-colors p-1 flex-shrink-0">
+                        {copiedField === 'subject' ? <FiCheck className="w-3.5 h-3.5 text-green-500" /> : <FiCopy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
                   <Separator className="bg-border" />
                   <div>
@@ -494,7 +529,7 @@ function DetailDrawer({ event, isOpen, onClose, onTrack, isTracked }: {
 
         {/* Footer */}
         <div className="p-4 border-t border-border">
-          <Button onClick={() => onTrack(event)} disabled={isTracked} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 tracking-[0.12em] uppercase text-xs font-medium py-5">
+          <Button type="button" onClick={() => onTrack(event)} disabled={isTracked} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 tracking-[0.12em] uppercase text-xs font-medium py-5">
             {isTracked ? (
               <><FiCheck className="w-4 h-4 mr-2" /> Tracked in Pipeline</>
             ) : (
@@ -548,13 +583,21 @@ export default function Page() {
   // ── Navigation ──
   const [activeView, setActiveView] = useState<'discover' | 'outreach'>('discover')
 
+  // ── Lifted chip + input state (FIX A) ──
+  const [locationChips, setLocationChips] = useState<string[]>([])
+  const [personaChips, setPersonaChips] = useState<string[]>([])
+  const [domainChips, setDomainChips] = useState<string[]>([])
+  const [locationInput, setLocationInput] = useState('')
+  const [personaInput, setPersonaInput] = useState('')
+  const [domainInput, setDomainInput] = useState('')
+
   // ── Search State ──
-  const [chips, setChips] = useState<{ location: string[]; persona: string[]; domain: string[] }>({ location: [], persona: [], domain: [] })
   const [events, setEvents] = useState<EventData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'score' | 'date'>('score')
   const [searchMeta, setSearchMeta] = useState<Partial<DiscoveryResponse>>({})
+  const [statusMessage, setStatusMessage] = useState('')
 
   // ── Drawer State ──
   const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null)
@@ -567,12 +610,15 @@ export default function Page() {
   // ── Sample Data Toggle ──
   const [showSample, setShowSample] = useState(false)
 
-  // ── Agent Activity ──
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const agentActivity = useLyzrAgentEvents(sessionId)
-
   // ── Active Agent Tracking ──
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
+
+  // ── Notification bar ──
+  const [notification, setNotification] = useState<string | null>(null)
+  const notify = useCallback((msg: string) => {
+    setNotification(msg)
+    setTimeout(() => setNotification(null), 3000)
+  }, [])
 
   // ── Load pipeline from localStorage ──
   useEffect(() => {
@@ -599,69 +645,83 @@ export default function Page() {
     }
   }, [])
 
-  // ── Parse agent response ──
-  const parseAgentResponse = useCallback((rawResult: unknown): DiscoveryResponse | null => {
-    let data = rawResult
-    if (typeof data === 'string') {
-      try {
-        data = JSON.parse(data)
-      } catch {
-        // Try to extract JSON from the string
-        const jsonMatch = (data as string).match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          try {
-            data = JSON.parse(jsonMatch[0])
-          } catch {
-            return null
-          }
-        } else {
-          return null
-        }
-      }
+  // ── Chip key handler ──
+  const onChipKey = useCallback((e: React.KeyboardEvent<HTMLInputElement>, val: string, setVal: (v: string) => void, chips: string[], setChips: (c: string[]) => void) => {
+    if ((e.key === 'Enter' || e.key === ',') && val.trim()) {
+      e.preventDefault()
+      setChips([...chips, val.trim()])
+      setVal('')
     }
-    if (!data || typeof data !== 'object') return null
-    const obj = data as Record<string, unknown>
-    return {
-      events: Array.isArray(obj.events) ? obj.events : [],
-      total_events_found: typeof obj.total_events_found === 'number' ? obj.total_events_found : 0,
-      search_summary: typeof obj.search_summary === 'string' ? obj.search_summary : '',
-      enrichment_summary: typeof obj.enrichment_summary === 'string' ? obj.enrichment_summary : '',
-      overall_strategy_summary: typeof obj.overall_strategy_summary === 'string' ? obj.overall_strategy_summary : ''
+    if (e.key === 'Backspace' && !val && chips.length > 0) {
+      setChips(chips.slice(0, -1))
     }
   }, [])
 
-  // ── Discover Events ──
-  const handleDiscover = useCallback(async () => {
-    const locationChips = Array.isArray(chips.location) ? chips.location : []
-    const personaChips = Array.isArray(chips.persona) ? chips.persona : []
-    const domainChips = Array.isArray(chips.domain) ? chips.domain : []
+  // ── Button enable check: chips AND typed text (FIX B) ──
+  const hasAnyInput = locationChips.length > 0 || locationInput.trim().length > 0 ||
+    personaChips.length > 0 || personaInput.trim().length > 0 ||
+    domainChips.length > 0 || domainInput.trim().length > 0
 
-    if (locationChips.length === 0 && personaChips.length === 0 && domainChips.length === 0) return
+  // ── Discover Events (FIX C, D, F) ──
+  const handleDiscover = useCallback(async () => {
+    // Auto-commit typed text into chips (FIX C)
+    const newLocChips = [...locationChips]
+    const newPerChips = [...personaChips]
+    const newDomChips = [...domainChips]
+
+    if (locationInput.trim()) {
+      newLocChips.push(locationInput.trim())
+      setLocationChips(newLocChips)
+      setLocationInput('')
+    }
+    if (personaInput.trim()) {
+      newPerChips.push(personaInput.trim())
+      setPersonaChips(newPerChips)
+      setPersonaInput('')
+    }
+    if (domainInput.trim()) {
+      newDomChips.push(domainInput.trim())
+      setDomainChips(newDomChips)
+      setDomainInput('')
+    }
+
+    if (newLocChips.length === 0 && newPerChips.length === 0 && newDomChips.length === 0) return
 
     setLoading(true)
     setError(null)
     setEvents([])
     setSearchMeta({})
     setActiveAgentId(AGENT_ID)
-    agentActivity.setProcessing(true)
+    setStatusMessage('Connecting to discovery agent...')
 
     const message = `Search for upcoming events with the following criteria:
-- Location: ${locationChips.join(', ') || 'Any'}
-- Target Persona: ${personaChips.join(', ') || 'Any'}
-- Domain: ${domainChips.join(', ') || 'Any'}
+- Location: ${newLocChips.join(', ') || 'Any'}
+- Target Persona: ${newPerChips.join(', ') || 'Any'}
+- Domain: ${newDomChips.join(', ') || 'Any'}
 
 Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter for events from today onwards. Enrich each event with organizer contact details and partnership links. Score each event for persona-domain alignment and draft outreach pitches.`
 
     try {
+      setStatusMessage('Searching events across platforms...')
       const result = await callAIAgent(message, AGENT_ID)
 
-      if (result?.session_id) {
-        setSessionId(result.session_id)
-      }
+      if (result && result.success) {
+        setStatusMessage('Processing results...')
 
-      if (result?.success) {
-        const rawResult = result?.response?.result
-        const parsed = parseAgentResponse(rawResult)
+        // Deep extraction with multiple fallback paths (FIX F)
+        let parsed = extractDiscoveryResponse(result?.response?.result)
+        if ((!parsed || parsed.events.length === 0) && result?.response?.message) {
+          parsed = extractDiscoveryResponse(result.response.message)
+        }
+        if ((!parsed || parsed.events.length === 0) && result?.response) {
+          parsed = extractDiscoveryResponse(result.response)
+        }
+        if ((!parsed || parsed.events.length === 0) && (result as Record<string, unknown>)?.raw_response) {
+          parsed = extractDiscoveryResponse((result as Record<string, unknown>).raw_response)
+        }
+        if (!parsed || parsed.events.length === 0) {
+          parsed = extractDiscoveryResponse(result)
+        }
 
         if (parsed && Array.isArray(parsed.events) && parsed.events.length > 0) {
           setEvents(parsed.events)
@@ -671,47 +731,22 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
             enrichment_summary: parsed.enrichment_summary,
             overall_strategy_summary: parsed.overall_strategy_summary
           })
+          notify(`Found ${parsed.events.length} events`)
         } else {
-          // Try alternate response paths
-          const altResult = result?.response?.message
-          if (typeof altResult === 'string') {
-            const altParsed = parseAgentResponse(altResult)
-            if (altParsed && Array.isArray(altParsed.events) && altParsed.events.length > 0) {
-              setEvents(altParsed.events)
-              setSearchMeta({
-                total_events_found: altParsed.total_events_found,
-                search_summary: altParsed.search_summary,
-                enrichment_summary: altParsed.enrichment_summary,
-                overall_strategy_summary: altParsed.overall_strategy_summary
-              })
-            } else {
-              setError('No events found. Try broadening your search criteria.')
-            }
-          } else {
-            setError('No events found. Try broadening your search criteria.')
-          }
+          setError('No events found. Try broadening your search criteria.')
         }
       } else {
-        setError(result?.error ?? 'Failed to discover events. Please try again.')
+        setError((result as Record<string, unknown>)?.error as string ?? 'Failed to discover events. Please try again.')
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please check your connection and try again.')
     } finally {
       setLoading(false)
       setActiveAgentId(null)
-      agentActivity.setProcessing(false)
+      setStatusMessage('')
     }
-  }, [chips, parseAgentResponse, agentActivity])
-
-  // ── Add chip ──
-  const addChip = useCallback((field: 'location' | 'persona' | 'domain', value: string) => {
-    setChips(prev => ({ ...prev, [field]: [...(Array.isArray(prev[field]) ? prev[field] : []), value] }))
-  }, [])
-
-  // ── Remove chip ──
-  const removeChip = useCallback((field: 'location' | 'persona' | 'domain', index: number) => {
-    setChips(prev => ({ ...prev, [field]: (Array.isArray(prev[field]) ? prev[field] : []).filter((_, i) => i !== index) }))
-  }, [])
+  // FIX D: NO agentActivity in deps
+  }, [locationChips, personaChips, domainChips, locationInput, personaInput, domainInput, notify])
 
   // ── Track event in pipeline ──
   const trackEvent = useCallback((event: EventData) => {
@@ -723,7 +758,8 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
       tracked_at: new Date().toISOString()
     }
     savePipeline([...pipeline, newEntry])
-  }, [pipeline, savePipeline])
+    notify('Event added to pipeline')
+  }, [pipeline, savePipeline, notify])
 
   // ── Check if event is tracked ──
   const isEventTracked = useCallback((event: EventData) => {
@@ -737,12 +773,6 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
       updated[index] = { ...updated[index], pipeline_status: status }
       savePipeline(updated)
     }
-  }, [pipeline, savePipeline])
-
-  // ── Remove from pipeline ──
-  const removeFromPipeline = useCallback((index: number) => {
-    const updated = pipeline.filter((_, i) => i !== index)
-    savePipeline(updated)
   }, [pipeline, savePipeline])
 
   // ── Display events (sorted) ──
@@ -760,10 +790,41 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
   // ── Unique domains from pipeline for filter ──
   const pipelineDomains = Array.from(new Set(pipeline.map(p => p?.organization_name ?? '').filter(Boolean)))
 
-  const hasChips = (Array.isArray(chips.location) && chips.location.length > 0) || (Array.isArray(chips.persona) && chips.persona.length > 0) || (Array.isArray(chips.domain) && chips.domain.length > 0)
+  // ── Chip field renderer (inline, parent owns state) ──
+  const chipField = (label: string, icon: React.ReactNode, chips: string[], setChips: (c: string[]) => void, val: string, setVal: (v: string) => void, ph: string) => (
+    <div className="flex-1 min-w-[180px]">
+      <label className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-normal mb-1.5 block">{label}</label>
+      <div className="flex items-center flex-wrap gap-1.5 bg-secondary/50 border border-border px-3 py-2 min-h-[40px] focus-within:border-primary/50 transition-colors">
+        {icon}
+        {chips.map((c, i) => (
+          <span key={i} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-primary/15 text-primary text-xs tracking-wide border border-primary/20">
+            {c}
+            <button type="button" onClick={(e) => { e.stopPropagation(); setChips(chips.filter((_, j) => j !== i)) }} className="hover:text-foreground ml-0.5">
+              <FiX className="w-3 h-3" />
+            </button>
+          </span>
+        ))}
+        <input
+          type="text"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => onChipKey(e, val, setVal, chips, setChips)}
+          placeholder={chips.length > 0 ? '' : ph}
+          className="flex-1 min-w-[80px] bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 outline-none tracking-wide"
+        />
+      </div>
+    </div>
+  )
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      {/* ── Notification Bar ── */}
+      {notification && (
+        <div className="fixed top-4 right-4 z-[60] px-4 py-2.5 bg-primary text-primary-foreground text-xs tracking-[0.12em] uppercase font-medium shadow-lg" style={{ animation: 'slideInRight 0.2s ease-out' }}>
+          {notification}
+        </div>
+      )}
+
       {/* ── Sidebar ── */}
       <aside className="w-[220px] flex-shrink-0 bg-[hsl(30_7%_7%)] border-r border-[hsl(30_6%_16%)] flex flex-col">
         <div className="p-6 border-b border-[hsl(30_6%_16%)]">
@@ -775,11 +836,11 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
-          <button onClick={() => setActiveView('discover')} className={`w-full flex items-center gap-3 px-4 py-3 text-xs tracking-[0.12em] uppercase transition-all duration-200 ${activeView === 'discover' ? 'bg-[hsl(30_5%_12%)] text-primary border-l-2 border-primary' : 'text-muted-foreground hover:text-foreground hover:bg-[hsl(30_5%_12%)] border-l-2 border-transparent'}`}>
+          <button type="button" onClick={() => setActiveView('discover')} className={`w-full flex items-center gap-3 px-4 py-3 text-xs tracking-[0.12em] uppercase transition-all duration-200 ${activeView === 'discover' ? 'bg-[hsl(30_5%_12%)] text-primary border-l-2 border-primary' : 'text-muted-foreground hover:text-foreground hover:bg-[hsl(30_5%_12%)] border-l-2 border-transparent'}`}>
             <FiCompass className="w-4 h-4" />
             Discover
           </button>
-          <button onClick={() => setActiveView('outreach')} className={`w-full flex items-center gap-3 px-4 py-3 text-xs tracking-[0.12em] uppercase transition-all duration-200 ${activeView === 'outreach' ? 'bg-[hsl(30_5%_12%)] text-primary border-l-2 border-primary' : 'text-muted-foreground hover:text-foreground hover:bg-[hsl(30_5%_12%)] border-l-2 border-transparent'}`}>
+          <button type="button" onClick={() => setActiveView('outreach')} className={`w-full flex items-center gap-3 px-4 py-3 text-xs tracking-[0.12em] uppercase transition-all duration-200 ${activeView === 'outreach' ? 'bg-[hsl(30_5%_12%)] text-primary border-l-2 border-primary' : 'text-muted-foreground hover:text-foreground hover:bg-[hsl(30_5%_12%)] border-l-2 border-transparent'}`}>
             <FiSend className="w-4 h-4" />
             My Outreach
             {pipeline.length > 0 && (
@@ -809,24 +870,31 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
             <h1 className="text-sm font-medium tracking-[0.12em] uppercase text-foreground">
               {activeView === 'discover' ? 'Event Discovery' : 'Outreach Pipeline'}
             </h1>
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] tracking-[0.12em] uppercase text-muted-foreground">Sample Data</span>
-              <Switch checked={showSample} onCheckedChange={setShowSample} className="data-[state=checked]:bg-primary" />
-            </div>
+            <label className="text-[10px] tracking-[0.12em] uppercase text-muted-foreground cursor-pointer flex items-center gap-2">
+              Sample preview
+              <input type="checkbox" checked={showSample} onChange={(e) => { setShowSample(e.target.checked); if (e.target.checked) setSearchMeta({ ...SAMPLE_SUMMARY }); else if (events.length === 0) setSearchMeta({}) }} className="w-3.5 h-3.5 cursor-pointer accent-[hsl(40,50%,55%)]" />
+            </label>
           </div>
 
           {activeView === 'discover' && (
             <div className="flex items-end gap-3 flex-wrap">
-              <ChipInput label="Location" icon={<FiMapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />} chips={chips.location} onAdd={(val) => addChip('location', val)} onRemove={(idx) => removeChip('location', idx)} placeholder="e.g. San Francisco" />
-              <ChipInput label="Persona" icon={<FiUsers className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />} chips={chips.persona} onAdd={(val) => addChip('persona', val)} onRemove={(idx) => removeChip('persona', idx)} placeholder="e.g. CTO, VP Eng" />
-              <ChipInput label="Domain" icon={<FiSearch className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />} chips={chips.domain} onAdd={(val) => addChip('domain', val)} onRemove={(idx) => removeChip('domain', idx)} placeholder="e.g. AI, SaaS" />
-              <Button onClick={handleDiscover} disabled={loading || (!hasChips && !showSample)} className="bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-2.5 text-xs tracking-[0.12em] uppercase font-medium h-[40px] flex-shrink-0">
+              {chipField('Location', <FiMapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />, locationChips, setLocationChips, locationInput, setLocationInput, 'e.g. San Francisco')}
+              {chipField('Persona', <FiUsers className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />, personaChips, setPersonaChips, personaInput, setPersonaInput, 'e.g. CTO, VP Eng')}
+              {chipField('Domain', <FiSearch className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />, domainChips, setDomainChips, domainInput, setDomainInput, 'e.g. AI, SaaS')}
+              {/* FIX E: Native <button> for Discover Events to avoid shadcn disabled:pointer-events-none */}
+              <button
+                type="button"
+                onClick={handleDiscover}
+                disabled={loading || !hasAnyInput}
+                style={{ height: 40 }}
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap px-6 text-xs tracking-[0.12em] uppercase font-medium transition-all duration-200 cursor-pointer select-none bg-[hsl(40,50%,55%)] text-[hsl(30,8%,6%)] hover:bg-[hsl(40,50%,48%)] active:bg-[hsl(40,50%,42%)] disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+              >
                 {loading ? (
-                  <><span className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" /> Searching...</>
+                  <><FiRefreshCw className="w-3.5 h-3.5 animate-spin" /> Searching...</>
                 ) : (
-                  <><HiOutlineSparkles className="w-3.5 h-3.5 mr-2" /> Discover Events</>
+                  <><HiOutlineSparkles className="w-3.5 h-3.5" /> Discover Events</>
                 )}
-              </Button>
+              </button>
             </div>
           )}
         </header>
@@ -835,6 +903,14 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
         <div className="flex-1 overflow-y-auto">
           {activeView === 'discover' ? (
             <div className="p-6">
+              {/* Status message during loading */}
+              {loading && statusMessage && (
+                <div className="mb-4 flex items-center gap-3 p-3 bg-secondary/20 border border-border">
+                  <FiRefreshCw className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
+                  <span className="text-xs text-muted-foreground tracking-wide">{statusMessage}</span>
+                </div>
+              )}
+
               {/* Summary Bar */}
               {(searchMeta?.search_summary || (showSample && SAMPLE_SUMMARY?.search_summary)) && (
                 <div className="mb-5 p-4 bg-secondary/30 border border-border">
@@ -871,26 +947,13 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
               )}
 
               {/* Loading State */}
-              {loading && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                    <span className="text-xs text-muted-foreground tracking-wide">Searching events across platforms...</span>
-                  </div>
-                  {agentActivity.lastThinkingMessage && (
-                    <div className="mb-4 p-3 border-l-2 border-primary/40 bg-secondary/20">
-                      <p className="text-[11px] text-muted-foreground tracking-wide italic">{agentActivity.lastThinkingMessage}</p>
-                    </div>
-                  )}
-                  <SkeletonCards />
-                </div>
-              )}
+              {loading && <SkeletonCards />}
 
               {/* Error State */}
               {error && !loading && (
                 <div className="flex flex-col items-center justify-center py-16">
                   <p className="text-sm text-muted-foreground tracking-wide mb-4">{error}</p>
-                  <Button onClick={handleDiscover} variant="outline" className="text-xs tracking-[0.12em] uppercase border-border text-foreground hover:bg-secondary">
+                  <Button type="button" onClick={handleDiscover} variant="outline" className="text-xs tracking-[0.12em] uppercase border-border text-foreground hover:bg-secondary">
                     Retry Search
                   </Button>
                 </div>
@@ -910,10 +973,10 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
                 <div className="flex flex-col items-center justify-center py-20">
                   <FiCompass className="w-10 h-10 text-muted-foreground/30 mb-4" />
                   <p className="text-sm text-muted-foreground tracking-wide mb-1">
-                    {hasChips ? 'No events found. Try broadening your search criteria.' : 'Enter your criteria above to discover events'}
+                    Enter your criteria above to discover events
                   </p>
                   <p className="text-xs text-muted-foreground/60 tracking-wide">
-                    Add location, persona, or domain chips and click Discover Events
+                    Add location, persona, or domain and click Discover Events
                   </p>
                 </div>
               )}
@@ -956,7 +1019,7 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
                   <FiSend className="w-10 h-10 text-muted-foreground/30 mb-4" />
                   <p className="text-sm text-muted-foreground tracking-wide mb-1">Discover events to start tracking</p>
                   <p className="text-xs text-muted-foreground/60 tracking-wide">Events you track will appear here in your pipeline</p>
-                  <Button onClick={() => setActiveView('discover')} variant="outline" className="mt-4 text-xs tracking-[0.12em] uppercase border-border text-foreground hover:bg-secondary">
+                  <Button type="button" onClick={() => setActiveView('discover')} variant="outline" className="mt-4 text-xs tracking-[0.12em] uppercase border-border text-foreground hover:bg-secondary">
                     <FiCompass className="w-3.5 h-3.5 mr-2" /> Go to Discover
                   </Button>
                 </div>
@@ -996,9 +1059,6 @@ Find relevant events on LinkedIn Events, Luma, Eventbrite, and Meetup. Filter fo
 
       {/* ── Detail Drawer ── */}
       <DetailDrawer event={selectedEvent} isOpen={drawerOpen} onClose={() => { setDrawerOpen(false); setSelectedEvent(null); }} onTrack={trackEvent} isTracked={selectedEvent ? isEventTracked(selectedEvent) : false} />
-
-      {/* ── Agent Activity Panel ── */}
-      <AgentActivityPanel isConnected={agentActivity.isConnected} events={agentActivity.events} thinkingEvents={agentActivity.thinkingEvents} lastThinkingMessage={agentActivity.lastThinkingMessage} activeAgentId={agentActivity.activeAgentId} activeAgentName={agentActivity.activeAgentName} isProcessing={agentActivity.isProcessing} />
     </div>
   )
 }
